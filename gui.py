@@ -67,11 +67,12 @@ class EntradaWindow():
         # App Frame
         self.app = my_app
         self.app.title(my_title)
-        # Armazena a referência ao menu principal
+
+        # Armazena a referência a janela principal
         self.menu_window = menu_window
 
         # Add UI elements
-        self.url_label = tk.Label(self.app, text="Enter image URL:")
+        self.url_label = tk.Label(self.app, text="URL da imagem:")
         self.url_label.pack()
 
         self.url_entry = tk.Entry(self.app, width=50)
@@ -88,13 +89,12 @@ class EntradaWindow():
         # Bind the close button to the destroy function
         self.app.protocol("WM_DELETE_WINDOW", self.destroy)
 
-    # Function to download a video
     def download_image(self):
         try:
             url = self.url_entry.get()
             if len(url) == 0:
                 raise ValueError('URL Vazia!')
-            os.makedirs("imagens", exist_ok=True)  # Create the "imagem" folder if needed            
+            os.makedirs("imagens", exist_ok=True)  
             self.msg_label.config(text="Aguarde...")
             self.msg_label.update_idletasks()
             nome, extensao = self.utilidades.extrair_nome_extensao_url(url)
@@ -122,6 +122,7 @@ class ViewWindow:
     def __init__(self, image_path, menu_window):
         self.app = tk.Toplevel()
         self.app.title("Image Viewer")
+
         # Armazena a referência ao menu principal
         self.menu_window = menu_window
 
@@ -196,7 +197,7 @@ class ViewAllImagesWindow:
         self.app.protocol("WM_DELETE_WINDOW", self.destroy)
 
     def find_images(self):
-        # if filename.endswith((".jpg", ".jpeg", ".png")):
+        # TODO: if filename.endswith((".jpg", ".jpeg", ".png")):
         utilidades = entidades.Util()
         self.image_paths = utilidades.list_files_by_date("imagens")
 
@@ -220,4 +221,3 @@ class ViewAllImagesWindow:
         # Reabilita o botão na janela principal
         self.menu_window.janela_view_all_images_button.config(state="normal")
         self.app.destroy()
-

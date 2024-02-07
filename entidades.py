@@ -1,5 +1,5 @@
 import requests
-from tqdm import tqdm  # Import for progress bar
+from tqdm import tqdm
 from urllib.parse import urlparse
 import os
 from datetime import datetime
@@ -19,7 +19,7 @@ class Util:
             return nome_arquivo, extensao
 
         except Exception as ex:
-            raise ValueError(f"{str(ex)}") from ex  # Preserve original exception
+            raise ValueError(f"{str(ex)}") from ex 
 
     def list_files_by_date(self,directory_path):
         try:
