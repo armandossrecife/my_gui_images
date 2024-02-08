@@ -16,6 +16,8 @@ Execute o arquivo principal
 python3 main.py
 ```
 
+[Detalhes do programa](https://github.com/armandossrecife/my_gui_images/blob/main/detalhes.md)
+
 ## Telas da Aplicação
 
 Tela Principal
