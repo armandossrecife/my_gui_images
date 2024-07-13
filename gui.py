@@ -12,27 +12,22 @@ class MenuWindow:
         self.app = my_app
         self.app.title(my_title)
 
-        # Add UI elements
+        # Registra os elementos de UI
         self.menu_label = tk.Label(self.app, text="Menu")
-        self.menu_label.pack()
-
         self.msg_label = tk.Label(self.app, text="")
-        self.msg_label.pack()        
-    
         self.janela_carrega_imagem_button = tk.Button(self.app, text="Carrega Imagem", command=self.carrega_janela_entrada)
-        self.janela_carrega_imagem_button.pack()
-
         self.janela_view_imagem_button = tk.Button(self.app, text="Mostra última imagem", command=self.carrega_view_image)
-        self.janela_view_imagem_button.pack()
-
         self.janela_view_all_images_button = tk.Button(self.app, text="Mostra as Imagens salvas", command=self.carrega_view_all_images)
-        self.janela_view_all_images_button.pack()
-
         self.last_image = None
-
         self.image_paths = []
-
         self.load_images()
+
+        # Adiciona os elementos registrados
+        self.menu_label.pack()
+        self.msg_label.pack()                
+        self.janela_carrega_imagem_button.pack()
+        self.janela_view_imagem_button.pack()
+        self.janela_view_all_images_button.pack()
 
     def carrega_janela_entrada(self):
         self.entrada_window = EntradaWindow(tk.Tk(), "Entrada de Imagem", self)
@@ -73,15 +68,13 @@ class EntradaWindow():
 
         # Add UI elements
         self.url_label = tk.Label(self.app, text="URL da imagem:")
-        self.url_label.pack()
-
         self.url_entry = tk.Entry(self.app, width=50)
-        self.url_entry.pack(padx=5, pady=5,fill = tk.BOTH)
-
         self.msg_label = tk.Label(self.app, text="")
-        self.msg_label.pack()        
-
         self.download_button = tk.Button(self.app, text="Download", command=self.download_image)
+        
+        self.url_label.pack()
+        self.url_entry.pack(padx=5, pady=5,fill = tk.BOTH)
+        self.msg_label.pack()        
         self.download_button.pack()
 
         self.utilidades = entidades.Util()
@@ -118,62 +111,9 @@ class EntradaWindow():
         self.menu_window.janela_carrega_imagem_button.config(state="normal")
         self.app.destroy()
 
-class ViewWindow:
-    def __init__(self, image_path, menu_window):
-        self.app = tk.Toplevel()
-        self.app.title("Image Viewer")
-
-        # Armazena a referência ao menu principal
-        self.menu_window = menu_window
-
-        # Error handling: Check if image exists before loading
-        if not os.path.exists(image_path):
-            self.show_error_message("Image not found!")
-            return
-
-        # Load image using PIL
-        self.image = PIL.Image.open(image_path)
-
-        # Create Scrollbar objects
-        self.x_scrollbar = tk.Scrollbar(self.app, orient=tk.HORIZONTAL)
-        self.y_scrollbar = tk.Scrollbar(self.app, orient=tk.VERTICAL)
-
-        # Create Canvas using the image size
-        self.canvas = tk.Canvas(self.app, xscrollcommand=self.x_scrollbar.set,
-                               yscrollcommand=self.y_scrollbar.set,
-                               width=self.image.width, height=self.image.height)
-
-        # Set Scrollbar commands
-        self.x_scrollbar.config(command=self.canvas.xview)
-        self.y_scrollbar.config(command=self.canvas.yview)
-
-        # Convert image to PhotoImage
-        self.photo = PIL.ImageTk.PhotoImage(self.image)
-
-        # Create an image object on the canvas with scrollbars
-        self.image_on_canvas = self.canvas.create_image(0, 0, image=self.photo, anchor="nw")
-
-        # Pack the widgets
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.x_scrollbar.pack(side="bottom", fill="x")
-        self.y_scrollbar.pack(side="right", fill="y")
-
-        # Bind the close button to the destroy function
-        self.app.protocol("WM_DELETE_WINDOW", self.destroy)
-
-    def show_error_message(self, message):
-        self.app = tk.Toplevel()
-        self.app.title("Error")
-        tk.Label(self.app, text=message).pack()
-
-    def destroy(self):
-        # Reabilita o botão na janela principal
-        self.menu_window.janela_view_imagem_button.config(state="normal")
-        self.app.destroy()
-
 class ViewAllImagesWindow:
     def __init__(self, menu_window):
-        # Create the main window
+        # Cria a janela filha
         self.app = tk.Toplevel()
         self.app.title("All Images")
     
@@ -255,8 +195,8 @@ class WindowImageViewer:
     Initializes the image viewer with a parent window and an image path (default provided).
 
     Args:
-      parent: The parent window for the image viewer (optional).
       image_path: The path to the image file to be displayed.
+      menu_window: The parent window for the image viewer.
     """
     self.app = tk.Toplevel()
     self.app.title("View Image")
@@ -322,7 +262,12 @@ class WindowImageViewer:
       self.imgtag = self.canvas.create_image(0, 0, anchor="nw", image=self.image2)
     except FileNotFoundError:
       print("Error: Image file not found!")
-    
+
+  def show_error_message(self, message):
+    self.app = tk.Toplevel()
+    self.app.title("Error")
+    tk.Label(self.app, text=message).pack()
+
   def destroy(self):
     # Reabilita o botão na janela principal
     self.menu_window.janela_view_imagem_button.config(state="normal")

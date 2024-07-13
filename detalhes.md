@@ -20,8 +20,8 @@
 - Permite aos usuários inserir uma URL e baixar a imagem.
 - Trata validações e mensagens de erro.
 
-**ViewWindow (Janela de Visualização)**:
-- Exibe uma imagem selecionada usando PIL e canvas Tkinter com barras de rolagem.
+**WindowImageViewer (Janela de Visualização)**:
+- Exibe uma imagem selecionada usando PIL e canvas Tkinter com barras de rolagem vertical e horizontal.
 - Trata possíveis erros caso o arquivo de imagem não seja encontrado.
 
 **ViewAllImagesWindow (Janela de Visualização de Todas as Imagens)**:
