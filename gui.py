@@ -45,8 +45,8 @@ class MenuWindow:
             self.janela_view_imagem_button.config(state="disabled")
             image_path = self.image_paths[-1]
             downloaded_image_path = image_path  # Replace with your actual path
-            view_window = ViewWindow(downloaded_image_path, self)
-            view_window.app.mainloop()
+            view_window_image = WindowImageViewer(downloaded_image_path, self)
+            view_window_image.app.mainloop()
         else: 
             messagebox.showinfo("Info", "Imagem não existe!") 
         
@@ -214,10 +214,93 @@ class ViewAllImagesWindow:
 
     # Open the selected image in a separate window
     def open_image(self, image_path):
-        # Create a ViewWindow instance for the selected image
-        ViewWindow(image_path, self.menu_window)
+        # Create a WindowImageViewer instance for the selected image
+        WindowImageViewer(image_path, self.menu_window)
 
     def destroy(self):
         # Reabilita o botão na janela principal
         self.menu_window.janela_view_all_images_button.config(state="normal")
         self.app.destroy()
+
+class WindowImageViewer:
+  """
+  A class to display an image with scrollbars in a tkinter window.
+  """
+
+  def __init__(self, image_path, menu_window):
+    """
+    Initializes the image viewer with a parent window and an image path (default provided).
+
+    Args:
+      parent: The parent window for the image viewer (optional).
+      image_path: The path to the image file to be displayed.
+    """
+    self.app = tk.Toplevel()
+    self.app.title("View Image")
+    
+    # Store reference to parent window
+    self.menu_window = menu_window
+
+    # Create a frame to hold the image
+    self.image_frame = tk.Frame(self.app)
+    
+    # Error handling: Check if image exists before loading
+    if not os.path.exists(image_path):
+        self.show_error_message("Image not found!")
+        return
+
+    # Load image using PIL
+    self.image = PIL.Image.open(image_path)
+    self.image_frame.pack(expand=True, fill=tk.BOTH)
+
+    self.create_widgets(image_path)  # Separate function to create widgets
+
+    # Bind the close button to the destroy function
+    self.app.protocol("WM_DELETE_WINDOW", self.destroy)
+
+  def create_widgets(self, image_path):
+    """
+    Creates the canvas, scrollbars, and displays the image.
+
+    Args:
+      image_path: The path to the image file to be displayed.
+    """
+    self.canvas = tk.Canvas(self.image_frame, relief=tk.SUNKEN)
+    self.canvas.config(width=800, height=600, highlightthickness=0)
+
+    self.sbarV = tk.Scrollbar(self.image_frame, orient=tk.VERTICAL)
+    self.sbarH = tk.Scrollbar(self.image_frame, orient=tk.HORIZONTAL)
+
+    self.sbarV.config(command=self.canvas.yview)
+    self.sbarH.config(command=self.canvas.xview)
+
+    self.canvas.config(yscrollcommand=self.sbarV.set)
+    self.canvas.config(xscrollcommand=self.sbarH.set)
+
+    self.sbarV.pack(side=tk.RIGHT, fill=tk.Y)
+    self.sbarH.pack(side=tk.BOTTOM, fill=tk.X)
+
+    self.canvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+
+    self.display_image(image_path)  # Separate function to display the image
+
+  def display_image(self, image_path):
+    """
+    Opens the image, sets scroll region, and displays it.
+
+    Args:
+      image_path: The path to the image file to be displayed.
+    """
+    try:
+      self.image = PIL.Image.open(image_path)
+      width, height = self.image.size
+      self.canvas.config(scrollregion=(0, 0, width, height))
+      self.image2 = PIL.ImageTk.PhotoImage(self.image)
+      self.imgtag = self.canvas.create_image(0, 0, anchor="nw", image=self.image2)
+    except FileNotFoundError:
+      print("Error: Image file not found!")
+    
+  def destroy(self):
+    # Reabilita o botão na janela principal
+    self.menu_window.janela_view_imagem_button.config(state="normal")
+    self.app.destroy()
