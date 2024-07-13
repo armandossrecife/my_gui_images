@@ -1,5 +1,7 @@
 # Classes do programa
 
+![Diagrama de Classes](https://github.com/armandossrecife/my_gui_images/blob/main/docs/my_download_images.png "Diagrama de Classes")
+
 ## Módulo entidades
 
 **Classe Util**:
