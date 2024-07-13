@@ -175,7 +175,7 @@ class ViewAllImagesWindow:
     def __init__(self, menu_window):
         # Create the main window
         self.app = tk.Toplevel()
-        self.app.title("View All Images")
+        self.app.title("All Images")
     
         # Store reference to parent window
         self.menu_window = menu_window
@@ -188,14 +188,31 @@ class ViewAllImagesWindow:
 
         # Create a frame to hold the thumbnail list
         self.thumbnail_frame = tk.Frame(self.app)
-        self.thumbnail_frame.pack()
+        self.thumbnail_frame.pack(expand=True, fill=tk.Y)
 
-        # Display thumbnails one by one
-        self.display_thumbnails()
+        self.create_widgets()  # Separate function to create widgets
 
         # Bind the close button to the destroy function
         self.app.protocol("WM_DELETE_WINDOW", self.destroy)
+    
+    def create_widgets(self):
+        # Create a canvas for scrolling
+        self.canvas = tk.Canvas(self.thumbnail_frame)
+        self.canvas.config(width=150, height=320)
+        self.canvas.pack(side=tk.LEFT, fill=tk.Y, expand=True)
 
+        # Create a scrollbar
+        self.scrollbar = tk.Scrollbar(self.thumbnail_frame, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Configure scrollbar and canvas
+        self.canvas.config(yscrollcommand=self.scrollbar.set)
+
+        # Create inner frame to hold buttons (avoid directly adding to canvas)
+        self.inner_frame = tk.Frame(self.canvas)
+
+        self.display_thumbnails()  # Separate function to display the buttons
+    
     def find_images(self):
         # TODO: if filename.endswith((".jpg", ".jpeg", ".png")):
         utilidades = entidades.Util()
@@ -207,10 +224,16 @@ class ViewAllImagesWindow:
             thumbnail = PIL.Image.open(image_path).resize((100, 100), PIL.Image.ANTIALIAS)
             thumbnail_photo = PIL.ImageTk.PhotoImage(thumbnail)
             # Create a button with the thumbnail and path information
-            thumbnail_button = tk.Button(self.thumbnail_frame, image=thumbnail_photo, command=lambda path=image_path: self.open_image(path))
+            thumbnail_button = tk.Button(self.inner_frame, image=thumbnail_photo, command=lambda path=image_path: self.open_image(path))
             thumbnail_button.image = thumbnail_photo
-            thumbnail_button.pack()
-            #thumbnail_button.grid(row=i // 3, column=i % 3)
+            thumbnail_button.pack(side=tk.TOP)
+        
+            # Place the inner frame on the canvas with an anchor (optional)
+        self.canvas.create_window((0, 0), anchor="nw", window=self.inner_frame)
+
+        # Update scroll region based on inner frame size (optional)
+        self.canvas.update_idletasks()  # Wait for widgets to be drawn
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
 
     # Open the selected image in a separate window
     def open_image(self, image_path):
