@@ -2,6 +2,7 @@ import os
 import queue
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox
 
 import PIL.Image
@@ -10,10 +11,14 @@ import PIL.ImageTk
 import entidades
 
 
+IMAGE_DIRECTORY = Path(__file__).resolve().parent / "imagens"
+
+
 class MenuWindow:
-    def __init__(self, my_app, my_title) -> None:
+    def __init__(self, my_app, my_title, image_directory=IMAGE_DIRECTORY) -> None:
         self.app = my_app
         self.app.title(my_title)
+        self.image_directory = Path(image_directory)
 
         self.menu_label = tk.Label(self.app, text="Menu")
         self.msg_label = tk.Label(self.app, text="")
@@ -64,7 +69,7 @@ class MenuWindow:
 
     def load_images(self):
         utilidades = entidades.Util()
-        self.image_paths = utilidades.list_files_by_date("imagens")
+        self.image_paths = utilidades.list_files_by_date(self.image_directory)
 
 
 class EntradaWindow:
@@ -87,6 +92,7 @@ class EntradaWindow:
         self.utilidades = entidades.Util()
         self.download_thread = None
         self.download_queue = queue.Queue()
+        self.cancel_event = threading.Event()
         self.closed = False
 
         self.app.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -98,28 +104,40 @@ class EntradaWindow:
             return
 
         try:
+            os.makedirs(self.menu_window.image_directory, exist_ok=True)
             nome, extensao = self.utilidades.extrair_nome_extensao_url(url)
-            filename = self.utilidades.criar_nome_unico("imagens", nome, extensao)
+            filename = self.utilidades.criar_nome_unico(
+                self.menu_window.image_directory,
+                nome,
+                extensao,
+            )
         except ValueError as ve:
             self.msg_label.config(text=str(ve))
             return
+        except OSError as ex:
+            self.msg_label.config(text=f"Nao foi possivel criar o arquivo: {ex}")
+            return
 
-        os.makedirs("imagens", exist_ok=True)
-        filename_path = os.path.join("imagens", filename)
+        filename_path = os.path.join(self.menu_window.image_directory, filename)
         self.download_button.config(state="disabled")
         self.msg_label.config(text="Aguarde...")
+        self.cancel_event = threading.Event()
 
         self.download_thread = threading.Thread(
             target=self._download_worker,
-            args=(url, filename_path),
+            args=(url, filename_path, self.cancel_event),
             daemon=True,
         )
         self.download_thread.start()
         self.app.after(100, self._check_download_queue)
 
-    def _download_worker(self, url, filename_path):
+    def _download_worker(self, url, filename_path, cancel_event):
         try:
-            download = entidades.Download(url, filename_path)
+            download = entidades.Download(
+                url,
+                filename_path,
+                cancel_event=cancel_event,
+            )
             download.executa()
         except Exception as ex:
             self.download_queue.put((None, ex))
@@ -152,6 +170,7 @@ class EntradaWindow:
 
     def destroy(self):
         self.closed = True
+        self.cancel_event.set()
         self.menu_window.janela_carrega_imagem_button.config(state="normal")
         self.app.destroy()
 
@@ -193,7 +212,7 @@ class ViewAllImagesWindow:
 
     def find_images(self):
         utilidades = entidades.Util()
-        self.image_paths = utilidades.list_files_by_date("imagens")
+        self.image_paths = utilidades.list_files_by_date(self.menu_window.image_directory)
 
     def display_thumbnails(self):
         for image_path in self.image_paths:

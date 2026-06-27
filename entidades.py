@@ -1,11 +1,17 @@
 import mimetypes
 import os
+import tempfile
+import threading
 from datetime import datetime
 from urllib.parse import urlparse
 
 import PIL.Image
 import requests
 from tqdm import tqdm
+
+
+class DownloadCancelado(Exception):
+    pass
 
 
 class Util:
@@ -33,13 +39,28 @@ class Util:
             raise ValueError(str(ex)) from ex
 
     def criar_nome_unico(self, directory_path, nome_arquivo, extensao):
-        filename = f"{nome_arquivo}{extensao}"
-        filename_path = os.path.join(directory_path, filename)
-        if not os.path.exists(filename_path):
+        os.makedirs(directory_path, exist_ok=True)
+        candidatos = [f"{nome_arquivo}{extensao}"]
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        candidatos.extend(
+            f"{nome_arquivo}_{timestamp}_{indice}{extensao}" for indice in range(1, 1001)
+        )
+
+        for filename in candidatos:
+            filename_path = os.path.join(directory_path, filename)
+            try:
+                file_descriptor = os.open(
+                    filename_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError:
+                continue
+
+            os.close(file_descriptor)
             return filename
 
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        return f"{nome_arquivo}_{timestamp}{extensao}"
+        raise OSError("Nao foi possivel reservar um nome unico para a imagem")
 
     def list_files_by_date(self, directory_path):
         try:
@@ -69,14 +90,23 @@ class Util:
 
     def _is_supported_image_path(self, file_path):
         _, extensao = os.path.splitext(file_path)
-        return os.path.isfile(file_path) and extensao.lower() in self.EXTENSOES_IMAGEM
+        return (
+            os.path.isfile(file_path)
+            and os.path.getsize(file_path) > 0
+            and extensao.lower() in self.EXTENSOES_IMAGEM
+        )
 
 
 class Download:
-    def __init__(self, url, path_arquivo):
+    TAMANHO_MAXIMO = 25 * 1024 * 1024
+
+    def __init__(self, url, path_arquivo, cancel_event=None, tamanho_maximo=None):
         self.url = url
-        self.path_arquivo = path_arquivo
+        self.path_arquivo = os.fspath(path_arquivo)
         self.callback = None
+        self.cancel_event = cancel_event or threading.Event()
+        self.tamanho_maximo = tamanho_maximo or self.TAMANHO_MAXIMO
+        self._arquivo_temporario = None
 
     def set_callback(self, callback):
         self.callback = callback
@@ -84,34 +114,82 @@ class Download:
     def executa(self):
         try:
             print("Aguarde...")
-            response = requests.get(self.url, stream=True, timeout=(5, 30))
-            response.raise_for_status()
-            self._validar_content_type(response)
+            self._arquivo_temporario = self._criar_arquivo_temporario()
+            tamanho_baixado = 0
 
-            total_size = int(response.headers.get("content-length", 0))
-            with open(self.path_arquivo, "wb") as file:
-                with tqdm(total=total_size, unit="B", unit_scale=True, desc=self.path_arquivo) as pbar:
-                    for chunk in response.iter_content(chunk_size=1024):
-                        if chunk:
+            with requests.get(self.url, stream=True, timeout=(5, 30)) as response:
+                response.raise_for_status()
+                self._validar_content_type(response)
+                total_size = self._obter_tamanho_informado(response)
+
+                with open(self._arquivo_temporario, "wb") as file:
+                    with tqdm(
+                        total=total_size,
+                        unit="B",
+                        unit_scale=True,
+                        desc=self.path_arquivo,
+                    ) as pbar:
+                        for chunk in response.iter_content(chunk_size=64 * 1024):
+                            self._verificar_cancelamento()
+                            if not chunk:
+                                continue
+
+                            tamanho_baixado += len(chunk)
+                            if tamanho_baixado > self.tamanho_maximo:
+                                raise ValueError(
+                                    f"A imagem excede o limite de {self.tamanho_maximo} bytes"
+                                )
+
                             file.write(chunk)
                             pbar.update(len(chunk))
                             if self.callback:
                                 self.callback(total_size, pbar.n)
 
-            self._validar_arquivo_imagem()
+            self._verificar_cancelamento()
+            self._validar_arquivo_imagem(self._arquivo_temporario)
+            self._verificar_cancelamento()
+            os.replace(self._arquivo_temporario, self.path_arquivo)
+            self._arquivo_temporario = None
             print(
-                f"Download completo. Tamanho: {total_size}, Arquivo salvo em: {self.path_arquivo}"
+                f"Download completo. Tamanho: {tamanho_baixado}, "
+                f"Arquivo salvo em: {self.path_arquivo}"
             )
-            return total_size
+            return tamanho_baixado
+        except DownloadCancelado:
+            raise
         except requests.exceptions.MissingSchema as ex:
-            self._remover_arquivo_invalido()
             raise Exception("URL invalida. Certifique-se de fornecer uma URL valida.") from ex
         except requests.exceptions.RequestException as e:
-            self._remover_arquivo_invalido()
             raise Exception(f"Erro na conexao: {e}") from e
         except (OSError, PIL.UnidentifiedImageError, ValueError) as e:
-            self._remover_arquivo_invalido()
             raise Exception(f"Arquivo baixado nao e uma imagem valida: {e}") from e
+        finally:
+            self._remover_arquivos_incompletos()
+
+    def _criar_arquivo_temporario(self):
+        directory_path = os.path.dirname(os.path.abspath(self.path_arquivo))
+        filename = os.path.basename(self.path_arquivo)
+        file_descriptor, temp_path = tempfile.mkstemp(
+            dir=directory_path,
+            prefix=f".{filename}.",
+            suffix=".part",
+        )
+        os.close(file_descriptor)
+        return temp_path
+
+    def _obter_tamanho_informado(self, response):
+        content_length = response.headers.get("content-length")
+        if not content_length:
+            return 0
+
+        total_size = int(content_length)
+        if total_size > self.tamanho_maximo:
+            raise ValueError(f"A imagem excede o limite de {self.tamanho_maximo} bytes")
+        return total_size
+
+    def _verificar_cancelamento(self):
+        if self.cancel_event.is_set():
+            raise DownloadCancelado("Download cancelado")
 
     def _validar_content_type(self, response):
         content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
@@ -121,13 +199,21 @@ class Download:
         if guessed_type and not guessed_type.startswith("image/"):
             raise ValueError(f"Extensao de arquivo inesperada: {self.path_arquivo}")
 
-    def _validar_arquivo_imagem(self):
-        with PIL.Image.open(self.path_arquivo) as image:
+    def _validar_arquivo_imagem(self, file_path):
+        with PIL.Image.open(file_path) as image:
             image.verify()
 
-    def _remover_arquivo_invalido(self):
+    def _remover_arquivos_incompletos(self):
+        arquivos = [self._arquivo_temporario]
         try:
-            if os.path.exists(self.path_arquivo):
-                os.remove(self.path_arquivo)
+            if os.path.exists(self.path_arquivo) and os.path.getsize(self.path_arquivo) == 0:
+                arquivos.append(self.path_arquivo)
         except OSError as e:
-            print(f"Erro ao remover arquivo invalido {self.path_arquivo}: {e}")
+            print(f"Erro ao verificar arquivo incompleto {self.path_arquivo}: {e}")
+
+        for file_path in arquivos:
+            try:
+                if file_path and os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError as e:
+                print(f"Erro ao remover arquivo incompleto {file_path}: {e}")
