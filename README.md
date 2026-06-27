@@ -5,6 +5,7 @@ Aplicação desktop em Python e Tkinter para baixar, organizar e visualizar imag
 ## Funcionalidades
 
 - Download de imagens por URL sem bloquear a interface gráfica.
+- Barra de progresso com percentual e volume baixado na janela de entrada.
 - Validação do protocolo, da extensão, do `Content-Type` e do conteúdo da imagem.
 - Suporte a arquivos JPG, JPEG, PNG, GIF, BMP e WebP.
 - Limite de 25 MiB por download, verificado pelo cabeçalho e pelos bytes recebidos.

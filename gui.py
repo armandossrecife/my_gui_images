@@ -3,7 +3,7 @@ import queue
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 import PIL.Image
 import PIL.ImageTk
@@ -82,11 +82,20 @@ class EntradaWindow:
         self.url_label = tk.Label(self.app, text="URL da imagem:")
         self.url_entry = tk.Entry(self.app, width=50)
         self.msg_label = tk.Label(self.app, text="")
+        self.progress_bar = ttk.Progressbar(
+            self.app,
+            length=350,
+            mode="determinate",
+            maximum=100,
+        )
+        self.progress_label = tk.Label(self.app, text="")
         self.download_button = tk.Button(self.app, text="Download", command=self.download_image)
 
         self.url_label.pack()
         self.url_entry.pack(padx=5, pady=5, fill=tk.BOTH)
         self.msg_label.pack()
+        self.progress_bar.pack(padx=5, pady=(5, 0), fill=tk.X)
+        self.progress_label.pack()
         self.download_button.pack()
 
         self.utilidades = entidades.Util()
@@ -98,6 +107,7 @@ class EntradaWindow:
         self.app.protocol("WM_DELETE_WINDOW", self.destroy)
 
     def download_image(self):
+        self._reset_progress()
         url = self.url_entry.get().strip()
         if not url:
             self.msg_label.config(text="URL Vazia!")
@@ -122,6 +132,7 @@ class EntradaWindow:
         self.download_button.config(state="disabled")
         self.msg_label.config(text="Aguarde...")
         self.cancel_event = threading.Event()
+        self._start_progress()
 
         self.download_thread = threading.Thread(
             target=self._download_worker,
@@ -138,39 +149,98 @@ class EntradaWindow:
                 filename_path,
                 cancel_event=cancel_event,
             )
+            download.set_callback(
+                lambda total, current: self.download_queue.put(
+                    ("progress", total, current)
+                )
+            )
             download.executa()
         except Exception as ex:
-            self.download_queue.put((None, ex))
+            self.download_queue.put(("finished", None, ex))
             return
 
-        self.download_queue.put((filename_path, None))
+        self.download_queue.put(("finished", filename_path, None))
 
     def _check_download_queue(self):
         if self.closed:
             return
 
-        try:
-            filename_path, error = self.download_queue.get_nowait()
-        except queue.Empty:
-            self.app.after(100, self._check_download_queue)
-            return
+        while True:
+            try:
+                event = self.download_queue.get_nowait()
+            except queue.Empty:
+                self.app.after(100, self._check_download_queue)
+                return
 
-        self._download_finished(filename_path, error)
+            event_type = event[0]
+            if event_type == "progress":
+                _, total_size, downloaded_size = event
+                self._update_progress(total_size, downloaded_size)
+                continue
+
+            _, filename_path, error = event
+            self._download_finished(filename_path, error)
+            return
 
     def _download_finished(self, filename_path, error):
         self.download_button.config(state="normal")
+        self.progress_bar.stop()
 
         if error:
+            self._reset_progress()
             self.msg_label.config(text=f"Erro no download: {error}")
             return
 
+        self.progress_bar.config(mode="determinate", maximum=100, value=100)
+        self.progress_label.config(text="100%")
         self.msg_label.config(text="Download concluido com sucesso!")
         self.menu_window.last_image = filename_path
         self.menu_window.load_images()
 
+    def _start_progress(self):
+        self.progress_bar.config(mode="indeterminate", maximum=100, value=0)
+        self.progress_bar.start(10)
+        self.progress_label.config(text="Conectando...")
+
+    def _reset_progress(self):
+        self.progress_bar.stop()
+        self.progress_bar.config(mode="determinate", maximum=100, value=0)
+        self.progress_label.config(text="")
+
+    def _update_progress(self, total_size, downloaded_size):
+        if total_size > 0:
+            self.progress_bar.stop()
+            self.progress_bar.config(
+                mode="determinate",
+                maximum=total_size,
+                value=min(downloaded_size, total_size),
+            )
+            percentage = min(downloaded_size / total_size * 100, 100)
+            self.progress_label.config(
+                text=(
+                    f"{percentage:.0f}% "
+                    f"({self._format_bytes(downloaded_size)} de "
+                    f"{self._format_bytes(total_size)})"
+                )
+            )
+            return
+
+        self.progress_label.config(
+            text=f"{self._format_bytes(downloaded_size)} baixados"
+        )
+
+    @staticmethod
+    def _format_bytes(size):
+        if size >= 1024 * 1024:
+            return f"{size / (1024 * 1024):.1f} MiB"
+        if size >= 1024:
+            return f"{size / 1024:.1f} KiB"
+        return f"{size} B"
+
     def destroy(self):
         self.closed = True
         self.cancel_event.set()
+        self.progress_bar.stop()
         self.menu_window.janela_carrega_imagem_button.config(state="normal")
         self.app.destroy()
 

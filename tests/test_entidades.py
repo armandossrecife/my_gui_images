@@ -61,15 +61,21 @@ class DownloadTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             filename = Util().criar_nome_unico(directory, "foto", ".png")
             destination = Path(directory) / filename
+            progress_events = []
 
             with patch(
                 "entidades.requests.get",
                 return_value=FakeResponse(content, content_length=len(content)),
             ):
-                downloaded = Download("https://example.com/foto.png", destination).executa()
+                download = Download("https://example.com/foto.png", destination)
+                download.set_callback(
+                    lambda total, current: progress_events.append((total, current))
+                )
+                downloaded = download.executa()
 
             self.assertEqual(len(content), downloaded)
             self.assertEqual(content, destination.read_bytes())
+            self.assertEqual((len(content), len(content)), progress_events[-1])
             self.assertFalse(any(Path(directory).glob("*.part")))
 
     def test_rejeita_download_acima_do_limite(self):
